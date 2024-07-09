@@ -84,7 +84,8 @@ async function configureMessageBus() {
     })).catch(console.error);
     await messageBus.subscribe(QUEUE_TASK_TYPE.SCRAPING+".cancel."+PROCESS_ID).then(handle=>handle(({data})=>{
         console.log(data);
-        taskFinished({slug,config_id:config.id}).catch(console.error).finally(()=>endProcess('Job cancelled'));
+        let {slug,config_id} = data;
+        taskFinished({slug,config_id}).catch(console.error).finally(()=>endProcess('Job cancelled')); // TODO: fix
     })).catch(console.error);
 }
 async function startScraping({client,slug,config},endProcessDelay) {
