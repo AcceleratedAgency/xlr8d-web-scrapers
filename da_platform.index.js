@@ -82,32 +82,30 @@ async function configureMessageBus() {
         startScraping(data,debounce(endProcess,6e4)).catch(console.error);
         channel.ack(msg);
     })).catch(console.error);
-    await messageBus.subscribe(QUEUE_TASK_TYPE.SCRAPING+".cancel."+PROCESS_ID).then(handle=>handle(({data})=>{
-        console.log(data);
-        let {slug,config_id} = data;
-        taskFinished({slug,config_id}).catch(console.error).finally(()=>endProcess('Job cancelled')); // TODO: fix
-    })).catch(console.error);
 }
-async function startScraping({client,slug,config},endProcessDelay) {
+async function startScraping({id,client,slug,config},endProcessDelay) {
     console.log(config);
+    await messageBus.subscribe(QUEUE_TASK_TYPE.SCRAPING+".cancel."+id).then(handle=>handle(()=>{
+        taskFinished(id).catch(console.error).finally(()=>endProcess('Job cancelled'));
+    })).catch(console.error);
     // do the job
+    // TODO: webscraper
     await new Promise(r=>setTimeout(r,50000));
     endProcessDelay();
     // save to db and add ID tp message 
     await messageBus.getQueue(QUEUE_TASK_TYPE.CLASSIFY).then(({send})=>send({
-        PROCESS_ID,
+        id,
         client,
         slug,
-        config_id:config.id,
         db_collection: QUEUE_TASK_TYPE.SCRAPING,
         db_doc_id
     })).catch(console.error);
     //end the job
     endProcessDelay();
-    await taskFinished({slug,config_id:config.id}).catch(console.error);
+    await taskFinished(id).catch(console.error);
 }
-async function taskFinished(task) {
-    return messageBus.publish(QUEUE_TASK_TYPE.SCRAPING+'.finished',task);
+async function taskFinished(id) {
+    return messageBus.getQueue(QUEUE_TASK_TYPE.SCRAPING+'.finished').then(({send})=>send({id}));
 }
 (async ()=>{
     console.log('Starting web-scraper: ', PROCESS_ID);
