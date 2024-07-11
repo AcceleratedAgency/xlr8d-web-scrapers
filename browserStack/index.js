@@ -5,6 +5,7 @@ let webdriver = require('selenium-webdriver');
 let delay = +process.env.IDLE_TIMEOUT||3000;
 var default_capabilities = JSON.parse(fs.readFileSync(path.join(__dirname,'./default_capabilities.json')));
 function log() {
+    if (!process.env.ENABLE_DEBUG) return;
     console.log("[BS scraping] ",...arguments);
 }
 async function scrapers(config,subject) {
@@ -30,7 +31,11 @@ async function getContentDump(config, subject) {
 		"accessKey" : process.env.BS_ACCESS_KEY
 	}}};
     let driver = await new webdriver.Builder().usingServer(`https://${process.env.BS_USER_NAME}:${process.env.BS_ACCESS_KEY}@hub-cloud.browserstack.com/wd/hub`).withCapabilities(capabilities).build();
-    let stop = !1;
+    let stop = !1; // switch to cancel job
+    let subscription = subject.subscribe({complete: ()=>{
+        stop=!0; //cancel job
+        log('\n\nTask interrupted\n\n',stop);
+    }});
     let ErrorMessage=async function(message,...data){
         await driver.takeScreenshot();
         await driver.executeScript(`browserstack_executor: ${JSON.stringify({
@@ -72,9 +77,6 @@ async function getContentDump(config, subject) {
             }
         })}`);
     }
-    let subscription = subject.subscribe({
-        complete: ()=>stop=!0
-    });
 	await driver.manage().setTimeouts({ implicit: delay }).catch(e=>console.log(e));
     await driver.manage().window().maximize();
     await driver.get(url).catch(e=>console.log(e));
@@ -133,7 +135,7 @@ async function getContentDump(config, subject) {
                 } catch (e) {}
             }
             if (iframe) await driver.switchTo().defaultContent().catch(e=>console.log(e));
-            clicked && await new Promise(r=>setTimeout(r,delay));
+            await new Promise(r=>setTimeout(r,delay));
         }
     }
     while (repeat--){
