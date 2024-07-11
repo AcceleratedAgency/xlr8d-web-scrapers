@@ -25,7 +25,7 @@ let messageBus = null;
 const mongo_client = new MongoClient(`mongodb://${MONGODB_USER}:${MONGODB_PASS}@${MONGODB_HOST}`);
 const PROCESS_ID = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>(c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)); //UUIDv4
 const QUEUE_TASK_TYPE = {
-    SCRAPING: 'web-scraping',
+    SCRAPING: 'web_scraping',
     CLASSIFY: 'classification',
     REMOVE_QUEUED: 'da_platform_remove_queued'
 }
@@ -35,7 +35,7 @@ async function messageBusInit() {
     while (!!wait--) {//wait for RabbitMQ
         try {
             rabbitmq_conn = await amqp.connect(`amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@${RABBITMQ_HOST}`);
-            subscriptions.push(rabbitmq_conn.close);
+            subscriptions.push(_=>rabbitmq_conn.close());
             break;
         } catch(e) { console.log('waiting for RabbitMQ\n', e)}
         await new Promise(r=>setTimeout(r,1000));
@@ -97,8 +97,7 @@ async function startScraping({id,client,slug,config},endProcessDelay) {
         taskSubject.complete();
         taskFinished(id).catch(console.error).finally(()=>endProcess('Job cancelled'));
     })).catch(console.error);
-    // do the job
-    subscriptions.push(taskSubject.subscribe(async data=>{
+    let sub = taskSubject.subscribe(async data=>{
         endProcessDelay();
         let db_doc_id = await storeData(slug,QUEUE_TASK_TYPE.SCRAPING,data).catch(console.error);
         if (!db_doc_id) return;
@@ -110,7 +109,8 @@ async function startScraping({id,client,slug,config},endProcessDelay) {
             db_doc_id
         })).catch(console.error);
         endProcessDelay();
-    }).unsubscribe);
+    });
+    subscriptions.push(_=>sub.unsubscribe());
     let {scrapers} = require('./browserStack');
     await scrapers(config,taskSubject)
     .then(taskFinished.bind(this,id))
