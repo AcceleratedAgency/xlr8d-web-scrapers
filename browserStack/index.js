@@ -123,9 +123,8 @@ async function getContentDump(config, subject) {
                 try {
                     if (!iframe) await driver.actions().scroll(0, 0, 0, Math.round(60+(Math.random()*10)), element).perform().catch(e=>console.log(e));
                     await ConsoleLog(`${dump? 'Dumping':'Clicking'} "${await element.getText().catch(e=>console.log(e))}"\nselector ${target}`);
-                    dump? dump(current_url, await driver.executeScript("return arguments[0].outerHTML;", element).catch(e=>console.log(e))):await element.click();
-                    clicked=!0;
-                    break;
+                    dump? dump(current_url, element.getAttribute('outerHTML')):await element.click();
+                    clicked=!dump;
                 } catch (e) {}
             }
             if (iframe) await driver.switchTo().defaultContent().catch(e=>console.log(e));
