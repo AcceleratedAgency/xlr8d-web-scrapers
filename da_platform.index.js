@@ -1,3 +1,4 @@
+const { Subject } = require('rxjs');
 const amqp = require('amqplib');
 const { MongoClient } = require('mongodb');
 const {
@@ -25,7 +26,8 @@ const mongo_client = new MongoClient(`mongodb://${MONGODB_USER}:${MONGODB_PASS}@
 const PROCESS_ID = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>(c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)); //UUIDv4
 const QUEUE_TASK_TYPE = {
     SCRAPING: 'web-scraping',
-    CLASSIFY: 'classification'
+    CLASSIFY: 'classification',
+    REMOVE_QUEUED: 'da_platform_remove_queued'
 }
 async function messageBusInit() {
     let rabbitmq_conn=null;
@@ -83,25 +85,39 @@ async function configureMessageBus() {
         channel.ack(msg);
     })).catch(console.error);
 }
+
+async function storeData(slug,db_collection,data) {
+    return (await mongo_client.db(slug).collection(db_collection).insertOne(data)).insertedId.toString();
+}
+
 async function startScraping({id,client,slug,config},endProcessDelay) {
     console.log(config);
+    const taskSubject = new Subject();
     await messageBus.subscribe(QUEUE_TASK_TYPE.SCRAPING+".cancel."+id).then(handle=>handle(()=>{
+        taskSubject.complete();
         taskFinished(id).catch(console.error).finally(()=>endProcess('Job cancelled'));
     })).catch(console.error);
     // do the job
-    // TODO: webscraper
-    await new Promise(r=>setTimeout(r,50000));
-    endProcessDelay();
-    // save to db and add ID tp message 
-    await messageBus.getQueue(QUEUE_TASK_TYPE.CLASSIFY).then(({send})=>send({
-        id,
-        client,
-        slug,
-        db_collection: QUEUE_TASK_TYPE.SCRAPING,
-        db_doc_id
-    })).catch(console.error);
-    //end the job
-    endProcessDelay();
+    subscriptions.push(taskSubject.subscribe(async data=>{
+        endProcessDelay();
+        let db_doc_id = await storeData(slug,QUEUE_TASK_TYPE.SCRAPING,data).catch(console.error);
+        if (!db_doc_id) return;
+        await messageBus.getQueue(QUEUE_TASK_TYPE.CLASSIFY).then(({send})=>send({
+            id,
+            client,
+            slug,
+            db_collection: QUEUE_TASK_TYPE.SCRAPING,
+            db_doc_id
+        })).catch(console.error);
+        endProcessDelay();
+    }).unsubscribe);
+    let {scrapers} = require('./browserStack');
+    await scrapers(config,taskSubject)
+    .then(taskFinished.bind(this,id))
+    .catch(e=>{
+        console.error('Scraping failed.', e, '\nRemoving task from the queue');
+        messageBus.getQueue(QUEUE_TASK_TYPE.REMOVE_QUEUED).then(({send})=>send({id}));
+    });
     await taskFinished(id).catch(console.error);
 }
 async function taskFinished(id) {

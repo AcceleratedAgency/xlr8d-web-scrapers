@@ -1,0 +1,21 @@
+{
+	"bstack:options" : {
+		"os" : "Windows",
+		"osVersion" : 11,
+		"projectName" : "TEST",
+		"buildName" : "CLIENT",
+		"local" : false,
+		"seleniumVersion" : "4.22.0",
+		"userName" : "BS_USER_NAME",
+		"accessKey" : "BS_ACCESS_KEY"
+	},
+	"browserName" : "Chrome",
+	"browserVersion" : "latest",
+    "goog:chromeOptions": {
+        "prefs": {
+          "profile.default_content_settings.popups" : 2,
+          "profile.managed_default_content_settings.notifications": 2,
+          "profile.managed_default_content_settings.geolocation" : 2
+        }
+    }
+}
