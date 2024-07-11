@@ -4,7 +4,9 @@ require('dotenv').config();
 let webdriver = require('selenium-webdriver');
 let delay = +process.env.IDLE_TIMEOUT||3000;
 var default_capabilities = JSON.parse(fs.readFileSync(path.join(__dirname,'./default_capabilities.json')));
-
+function log() {
+    console.log("[BS scraping] ",...arguments);
+}
 async function scrapers(config,subject) {
     switch (config.type) {
         case 'dump': return getContentDump(config,subject);
@@ -42,6 +44,7 @@ async function getContentDump(config, subject) {
         await driver.quit().catch(e=>console.log(e));
         subscription.unsubscribe();
         stop=!0;
+        log('Quiting:', {message,data});
         return {message, data};
     };
     let SuccessMessage = async function(message,...data){
@@ -56,9 +59,11 @@ async function getContentDump(config, subject) {
         await driver.quit().catch(e=>console.log(e));
         subscription.unsubscribe();
         stop=!0;
+        log('Quiting:', {message,data});
         return {message, data};
     };
     let ConsoleLog=async function(message) {
+        log(message);
         return driver.executeScript(`browserstack_executor: ${JSON.stringify({
             action: "annotate",
             arguments: {

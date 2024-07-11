@@ -8,8 +8,13 @@ const {
     RABBITMQ_USER,
     RABBITMQ_PASS,
     RABBITMQ_HOST,
-    MESSAGE_BUS_TOPIC
+    MESSAGE_BUS_TOPIC,
+    ENABLE_DEBUG
 } = process.env;
+function log() {
+    if (!ENABLE_DEBUG) return;
+    console.log(...arguments);
+}
 function debounce(f,w) {
     let d=setTimeout(f,w);
     return ()=>{clearTimeout(d);d=setTimeout(f,w);}
@@ -37,7 +42,7 @@ async function messageBusInit() {
             rabbitmq_conn = await amqp.connect(`amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@${RABBITMQ_HOST}`);
             subscriptions.push(_=>rabbitmq_conn.close());
             break;
-        } catch(e) { console.log('waiting for RabbitMQ\n', e)}
+        } catch(e) { log('waiting for RabbitMQ\n', e)}
         await new Promise(r=>setTimeout(r,1000));
     }
     let queues = new Map();
@@ -51,12 +56,17 @@ async function messageBusInit() {
             let channel = await rabbitmq_conn.createChannel();
             await channel.assertQueue(queue, {durable: !0});
             c = {
-                send: (msg,prop)=>channel.sendToQueue(queue,Buffer.from((typeof msg != typeof '')? JSON.stringify(msg):msg),prop),
+                send: (msg,prop)=>{
+                    log('Sending data to Queue:', queue, '\n', msg);
+                    return channel.sendToQueue(queue,Buffer.from((typeof msg != typeof '')? JSON.stringify(msg):msg),prop)
+                },
                 recv: (fn,prop={noAck:!1}) => {
                     channel.prefetch(1);
+                    log('Subscribed to Queue: ', queue);
                     return channel.consume(queue,msg=>{
                         let data=null;
-                        try {data=JSON.parse(msg.content.toString())} catch (e) {console.log('Error parsing JSON from: ', data)}
+                        try {data=JSON.parse(msg.content.toString())} catch (e) {log('Error parsing JSON from: ', data)}
+                        log('Recieved data in Queue:', queue, '\n', data);
                         fn(data,channel,msg);
                     },prop);
                 },
@@ -65,13 +75,18 @@ async function messageBusInit() {
             queues.set(queue,c);
             return c;
         }, 
-        publish: (key,msg)=>channel.publish(MESSAGE_BUS_TOPIC, key, Buffer.from((typeof msg != typeof '')? JSON.stringify(msg):msg)),
+        publish: (key,msg)=>{
+            log('Publishing data to Topic: ', MESSAGE_BUS_TOPIC, '\n', key, '\n', msg);
+            return channel.publish(MESSAGE_BUS_TOPIC, key, Buffer.from((typeof msg != typeof '')? JSON.stringify(msg):msg))
+        },
         subscribe: async (...keys)=>{
             let {queue} = await channel.assertQueue('',{exclusive: !0});
             for (let key of keys) channel.bindQueue(queue,MESSAGE_BUS_TOPIC,key);
+            log('Subscribed to the topic:',MESSAGE_BUS_TOPIC,'\n',key);
             return (fn,prop={noAck:!0}) => channel.consume(queue,msg=>{
                 let data=null;
                 try {data=JSON.parse(msg.content.toString())} catch (e) {console.log('Error parsing JSON from: ', data)}
+                log('Recieveddata in Topic',MESSAGE_BUS_TOPIC,'\n', msg.fields.routingKey,'\n', data);
                 fn({key:msg.fields.routingKey,data},channel,msg);
             },prop);
         }
@@ -81,24 +96,28 @@ async function configureMessageBus() {
     messageBus = await messageBusInit();
     //listenters
     await messageBus.getQueue(QUEUE_TASK_TYPE.SCRAPING).then(({recv})=>recv((data,channel,msg)=>{
+        log('Recieved task:', data);
         startScraping(data,debounce(endProcess,6e4)).catch(console.error);
         channel.ack(msg);
     })).catch(console.error);
 }
 
 async function storeData(slug,db_collection,data) {
+    log('Saving data to MongoDB:',{slug,db_collection,data});
     return (await mongo_client.db(slug).collection(db_collection).insertOne(data)).insertedId.toString();
 }
 
 async function startScraping({id,client,slug,config},endProcessDelay) {
-    console.log(config);
+    log("Starting scraping task:", {id,client,slug,config});
     const taskSubject = new Subject();
     await messageBus.subscribe(QUEUE_TASK_TYPE.SCRAPING+".cancel."+id).then(handle=>handle(()=>{
+        log('Task cancel requested:', id);
         taskSubject.complete();
         taskFinished(id).catch(console.error).finally(()=>endProcess('Job cancelled'));
     })).catch(console.error);
-    let sub = taskSubject.subscribe(async data=>{
+    let sub = taskSubject.subscribe({next: async data=>{
         endProcessDelay();
+        log(`Response from scraper: \n`, data);
         let db_doc_id = await storeData(slug,QUEUE_TASK_TYPE.SCRAPING,data).catch(console.error);
         if (!db_doc_id) return;
         await messageBus.getQueue(QUEUE_TASK_TYPE.CLASSIFY).then(({send})=>send({
@@ -109,7 +128,7 @@ async function startScraping({id,client,slug,config},endProcessDelay) {
             db_doc_id
         })).catch(console.error);
         endProcessDelay();
-    });
+    }});
     subscriptions.push(_=>sub.unsubscribe());
     let {scrapers} = require('./browserStack');
     await scrapers(config,taskSubject)
@@ -121,6 +140,7 @@ async function startScraping({id,client,slug,config},endProcessDelay) {
     await taskFinished(id).catch(console.error);
 }
 async function taskFinished(id) {
+    log('Scraping task Finished:',id);
     return messageBus.getQueue(QUEUE_TASK_TYPE.SCRAPING+'.finished').then(({send})=>send({id}));
 }
 (async ()=>{
@@ -131,7 +151,7 @@ async function taskFinished(id) {
             await mongo_client.connect();
             subscriptions.push(mongo_client.close.bind(mongo_client));
             break;
-        } catch(e) { console.log('waiting for MongoDB\n', e)}
+        } catch(e) { log('waiting for MongoDB\n', e)}
         await new Promise(r=>setTimeout(r,1000));
     }
     await configureMessageBus();
