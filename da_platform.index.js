@@ -82,7 +82,7 @@ async function messageBusInit() {
         subscribe: async (...keys)=>{
             let {queue} = await channel.assertQueue('',{exclusive: !0});
             for (let key of keys) channel.bindQueue(queue,MESSAGE_BUS_TOPIC,key);
-            log('Subscribed to the topic:',MESSAGE_BUS_TOPIC,'\n',key);
+            log('Subscribed to the topic:',MESSAGE_BUS_TOPIC,'\n',keys);
             return (fn,prop={noAck:!0}) => channel.consume(queue,msg=>{
                 let data=null;
                 try {data=JSON.parse(msg.content.toString())} catch (e) {console.log('Error parsing JSON from: ', data)}
