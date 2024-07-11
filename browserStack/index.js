@@ -1,8 +1,9 @@
-let fs=require("fs");
+const fs=require("fs");
+const path = require('path');
 require('dotenv').config();
 let webdriver = require('selenium-webdriver');
 let delay = +process.env.IDLE_TIMEOUT||3000;
-var default_capabilities = JSON.parse(fs.readFileSync('./default_capabilities.json'));
+var default_capabilities = JSON.parse(fs.readFileSync(path.join(__dirname,'./default_capabilities.json')));
 
 async function scrapers(config,subject) {
     switch (config.type) {

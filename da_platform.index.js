@@ -35,7 +35,7 @@ async function messageBusInit() {
     while (!!wait--) {//wait for RabbitMQ
         try {
             rabbitmq_conn = await amqp.connect(`amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@${RABBITMQ_HOST}`);
-            subscriptions.push(rabbitmq_conn.close.bind(rabbitmq_conn));
+            subscriptions.push(rabbitmq_conn.close);
             break;
         } catch(e) { console.log('waiting for RabbitMQ\n', e)}
         await new Promise(r=>setTimeout(r,1000));
