@@ -107,11 +107,12 @@ async function storeData(slug,db_collection,data) {
     return (await mongo_client.db(slug).collection(db_collection).insertOne(data)).insertedId.toString();
 }
 
-async function startScraping({id,client,slug,config},endProcessDelay) {
+async function startScraping(task,endProcessDelay) {
+    let {id,client,slug,config} = task;
     log("Starting scraping task:", {id,client,slug,config});
     const taskSubject = new Subject();
-    await messageBus.subscribe(QUEUE_TASK_TYPE.SCRAPING+".cancel."+id).then(handle=>handle(()=>{
-        log('Task cancel requested:', id);
+    await messageBus.subscribe(QUEUE_TASK_TYPE.SCRAPING+".cancel."+id).then(handle=>handle(task=>{
+        log('Task cancel requested:', id, "\n", task);
         taskSubject.complete();
         taskFinished(id).catch(console.error).finally(()=>endProcess('Job cancelled'));
     })).catch(console.error);
@@ -121,9 +122,7 @@ async function startScraping({id,client,slug,config},endProcessDelay) {
         let db_doc_id = await storeData(slug,QUEUE_TASK_TYPE.SCRAPING,data).catch(console.error);
         if (!db_doc_id) return;
         await messageBus.getQueue(QUEUE_TASK_TYPE.CLASSIFY).then(({send})=>send({
-            id,
-            client,
-            slug,
+            ...task,
             db_collection: QUEUE_TASK_TYPE.SCRAPING,
             db_doc_id
         })).catch(console.error);

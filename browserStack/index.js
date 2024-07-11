@@ -73,7 +73,7 @@ async function getContentDump(config, subject) {
         })}`);
     }
     let subscription = subject.subscribe({
-        complete: ErrorMessage.bind(this,'Task cancelled')
+        complete: ()=>stop=!0
     });
 	await driver.manage().setTimeouts({ implicit: delay }).catch(e=>console.log(e));
     await driver.manage().window().maximize();
@@ -94,7 +94,6 @@ async function getContentDump(config, subject) {
             }
             let current_url=await driver.getCurrentUrl().catch(e=>console.log(e));
             await ConsoleLog(`current URL: ${current_url}`);
-            if (/\/password/.test(current_url)) throw await ErrorMessage(`Website locked ${current_url}`);
             if (/\(iframe\)/.test(target)){
                 let split=target.split("(iframe)");
                 iframe = await driver.wait(driver.findElement(webdriver.By.css(split[0].trim())),delay).catch(e=>console.log(e));
@@ -125,6 +124,7 @@ async function getContentDump(config, subject) {
             }
             let clicked=!1;
             for (let element of elements) {
+                if (stop) return;
                 try {
                     if (!iframe) await driver.actions().scroll(0, 0, 0, Math.round(60+(Math.random()*10)), element).perform().catch(e=>console.log(e));
                     await ConsoleLog(`${dump? 'Dumping':'Clicking'} "${await element.getText().catch(e=>console.log(e))}"\nselector ${target}`);
@@ -137,10 +137,14 @@ async function getContentDump(config, subject) {
         }
     }
     while (repeat--){
-        if (stop) break;
-        await clickPath(clickPathBefore);
-        await clickPath(dump, async (url,content)=>!(content||'').length||subject.next({url,content}));
-        await clickPath(clickPathAfter);
+        for (let args of [
+            [clickPathBefore],
+            [dump, async (url,content)=>!(content||'').length||subject.next({url,content})],
+            [clickPathAfter]
+        ]) {
+            if (stop) return await SuccessMessage('Task cancelled');
+            await clickPath(...args);
+        }
     }
     return await SuccessMessage('Finished');
 }
