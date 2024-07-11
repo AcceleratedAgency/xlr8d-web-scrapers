@@ -139,7 +139,7 @@ async function getContentDump(config, subject) {
     while (repeat--){
         if (stop) break;
         await clickPath(clickPathBefore);
-        await clickPath(dump, (url,content)=>!!(content||'').length||subject.next({url,content}));
+        await clickPath(dump, async (url,content)=>!(content||'').length||subject.next({url,content}));
         await clickPath(clickPathAfter);
     }
     return await SuccessMessage('Finished');

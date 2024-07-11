@@ -137,7 +137,6 @@ async function startScraping({id,client,slug,config},endProcessDelay) {
         console.error('Scraping failed.', e, '\nRemoving task from the queue');
         messageBus.getQueue(QUEUE_TASK_TYPE.REMOVE_QUEUED).then(({send})=>send({id}));
     });
-    await taskFinished(id).catch(console.error);
 }
 async function taskFinished(id) {
     log('Scraping task Finished:',id);
