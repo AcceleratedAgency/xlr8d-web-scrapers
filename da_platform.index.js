@@ -106,15 +106,17 @@ async function storeData(slug,db_collection,data) {
     log('Saving data to MongoDB:',{slug,db_collection,data});
     return (await mongo_client.db(slug).collection(db_collection).insertOne(data)).insertedId.toString();
 }
-
+let cancelled=!1;
 async function startScraping(task,endProcessDelay) {
     let {id,client,slug,config} = task;
     log("Starting scraping task:", {id,client,slug,config});
     const taskSubject = new Subject();
     await messageBus.subscribe(QUEUE_TASK_TYPE.SCRAPING+".cancel."+id).then(handle=>handle(task=>{
+        if (cancelled) return;
         log('Task cancel requested:', id, "\n", task);
         taskSubject.complete();
         taskFinished(id).catch(console.error).finally(()=>endProcess('Job cancelled'));
+        cancelled=!0
     })).catch(console.error);
     let sub = taskSubject.subscribe({next: async data=>{
         endProcessDelay();
@@ -138,8 +140,9 @@ async function startScraping(task,endProcessDelay) {
     });
 }
 async function taskFinished(id) {
+    if (cancelled) return log('task already canceled');
     log('Scraping task Finished:',id);
-    return messageBus.getQueue(QUEUE_TASK_TYPE.SCRAPING+'.finished').then(({send})=>send({id}));
+    return await messageBus.getQueue(QUEUE_TASK_TYPE.SCRAPING+'.finished').then(({send})=>send({id}));
 }
 (async ()=>{
     console.log('Starting web-scraper: ', PROCESS_ID);
