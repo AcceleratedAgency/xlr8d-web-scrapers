@@ -53,12 +53,13 @@ async function messageBusInit() {
         getQueue: async queue => {
             let c = queues.get(queue);
             if (c) return c;
-            let channel = await rabbitmq_conn.createChannel();
+            let channel = await rabbitmq_conn.createConfirmChannel();
             await channel.assertQueue(queue, {durable: !0});
             c = {
                 send: (msg,prop)=>{
                     log('Sending data to Queue:', queue, '\n', msg);
-                    return channel.sendToQueue(queue,Buffer.from((typeof msg != typeof '')? JSON.stringify(msg):msg),prop)
+                    channel.sendToQueue(queue,Buffer.from((typeof msg != typeof '')? JSON.stringify(msg):msg),prop);
+                    return channel.waitForConfirms();
                 },
                 recv: (fn,prop={noAck:!1}) => {
                     channel.prefetch(1);
@@ -150,7 +151,7 @@ async function taskFinished(id) {
     while (!!wait--) {//wait for MongoDB
         try {
             await mongo_client.connect();
-            subscriptions.push(mongo_client.close.bind(mongo_client));
+            subscriptions.push(_=>mongo_client.close());
             break;
         } catch(e) { log('waiting for MongoDB\n', e)}
         await new Promise(r=>setTimeout(r,1000));

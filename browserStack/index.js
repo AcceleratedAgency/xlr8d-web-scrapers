@@ -34,7 +34,7 @@ async function getContentDump(config, subject) {
     let stop = !1; // switch to cancel job
     let subscription = subject.subscribe({complete: ()=>{
         stop=!0; //cancel job
-        log('\n\nTask interrupted\n\n',stop);
+        log('\n\nTask interrupted\n\n');
     }});
     let ErrorMessage=async function(message,...data){
         await driver.takeScreenshot();
