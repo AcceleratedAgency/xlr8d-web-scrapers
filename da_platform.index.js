@@ -149,7 +149,7 @@ async function prepareVariables(run,die) {
 (async ()=>{
     console.log('Starting web-scraper: ', PROCESS_ID);
     messageBus = await messageBusInit();
-    await Promise(prepareVariables);
+    await new Promise(prepareVariables);
     mongo_client = new MongoClient(`mongodb://${service_config.MONGODB_USER}:${service_config.MONGODB_PASS}@${service_config.MONGODB_HOST}`);
     let wait = 200;
     while (!!wait--) {//wait for MongoDB
